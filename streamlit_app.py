@@ -1,59 +1,89 @@
 import streamlit as st
 import openai
+from gtts import gTTS
+import os
+import speech_recognition as sr
 
 # Set your OpenAI API key manually
 openai.api_key = "sk-proj-SOWEfXRcOPAVA8pN7UM9T3BlbkFJdEsqOXSMrBd6KMsQSFBz"
 
 # Initialize session state for chat history
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+if "chat_history" not in st.session_state:
+    st.session_state["chat_history"] = []
 
-# Define the system prompt with TGM Education's information
-system_prompt = """
-You are a knowledgeable assistant for TGM Education, a leading study abroad consultancy. 
-Provide accurate and helpful information based on the following details:
+# Function to interact with OpenAI API
+def get_openai_response(user_input):
+    messages = [
+        {"role": "system", "content": "You are a friendly and helpful chatbot. Engage in a general conversation with the user and provide helpful, polite, and informative responses."}
+    ]
+    for chat in st.session_state["chat_history"]:
+        messages.append({"role": "user", "content": chat["user"]})
+        messages.append({"role": "assistant", "content": chat["bot"]})
 
-- **Services Offered:** Student placement for A-Level, Foundation, Undergraduate, Postgraduate, and PhD programs; visa counseling services.
-- **Partner Countries:** United Kingdom, United States, Canada, Ireland, Singapore, Malaysia, United Arab Emirates.
-- **Office Locations and Contact Information:**
-  - **Lagos Office:** 3rd Floor, Kobis Building, 18/20 Kudirat Abiola Way, Oregun, Lagos, Nigeria. Phone: +234 908-077-5662, +234 811-111-1054, +234 809-393-8202. Email: info@tgmeducation.com
-  - **Abuja Office:** Suite 313 GCL Plaza, 522 Aminu Kano Crescent, Wuse 2, Opp. DBM Plaza, Abuja, Nigeria. Phone: +234 809-393-8217, +234 809-798-9326. Email: info.abj@tgmeducation.com
-  - **Ibadan Office:** 47 Along Liberty Road, Oke-Ado, Ibadan. Phone: +234 908-077-5662. Email: ibadanoffice@tgmeducation.com
-  - **Benin Office:** 2nd Floor (Asimowu House), 44 Akpakpava Road, Benin City. Phone: +234 913-441-5467, +234 913-799-6199, +234 811-111-1054. Email: info.benin@tgmeducation.com
-  - **Kano Office:** Shop B8 Turai Plaza (Beside 9mobile Office), Audu-Bako Way, Nasarawa GRA, Kano. Phone: +234 809-017-9458, +234 809-393-8202. Email: info.kano@tgmeducation.com
-  - **Ghana Office:** 34, Lagos Avenue, GCB Building, East Legon, Accra, Ghana. Phone: +233 55 205 3634, +233 55 203 2532, +233 55 977 1527, +233 55 193 9281. Email: ghana@tgmeducation.com
-  - **Uganda Office:** The Cube (Opp. Acacia Mall), Copper Rd, Kampala, Uganda. Phone: +256 757 784480, +256 762 206318, +256 705 076650. Email: uganda@tgmeducation.com
-- **Referral Program:** Earn up to N200,000 by referring others to TGM Education.
+    messages.append({"role": "user", "content": user_input})
+    
+    try:
+        completion = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=messages,
+            max_tokens=200,
+            temperature=0.7,
+        )
+        return completion.choices[0].message.content.strip()
+    except openai.error.OpenAIError as e:
+        return f"An error occurred: {e}"
 
-Respond politely and informatively. If a question is outside your scope, suggest contacting TGM Education directly.
-"""
+# Function to generate audio response using gTTS
+def generate_audio_response(text):
+    tts = gTTS(text=text, lang="en", tld="co.uk")  # British accent
+    audio_file = "response.mp3"
+    tts.save(audio_file)
+    return audio_file
 
-# Display chat messages from history on app rerun
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+# Chatbot title
+st.title("Normal Chatbot")
+st.write("Welcome to the chatbot! Feel free to have a general conversation or ask any question.")
 
-# Accept user input
-if prompt := st.chat_input("Ask me about TGM Education!"):
-    # Add user message to chat history
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    # Display user message in chat message container
-    with st.chat_message("user"):
-        st.markdown(prompt)
+# Display chat history
+if st.session_state["chat_history"]:
+    for chat in st.session_state["chat_history"]:
+        st.write(f"**You:** {chat['user']}")
+        st.write(f"**Bot:** {chat['bot']}")
 
-    # Generate assistant response
-    with st.chat_message("assistant"):
+# Option for user to type or speak their input
+input_option = st.radio("How would you like to provide your input?", ("Type", "Speak"))
+
+user_input = ""
+if input_option == "Type":
+    user_input = st.text_area("Your message:", placeholder="Type your message here...")
+elif input_option == "Speak":
+    if st.button("Start Speaking"):
+        recognizer = sr.Recognizer()
+        with sr.Microphone() as source:
+            st.write("Listening... Speak now.")
+            audio = recognizer.listen(source, timeout=10)
         try:
-            response = openai.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    *st.session_state.messages,
-                ],
-            )
-            assistant_message = response.choices[0].message["content"]
-            st.markdown(assistant_message)
-            # Add assistant response to chat history
-            st.session_state.messages.append({"role": "assistant", "content": assistant_message})
-        except Exception as e:
-            st.error("An error occurred. Please try again.")
+            user_input = recognizer.recognize_google(audio)
+            st.write(f"You said: {user_input}")
+        except sr.UnknownValueError:
+            st.error("Sorry, I couldn't understand the audio.")
+        except sr.RequestError as e:
+            st.error(f"Error with the speech recognition service: {e}")
+
+# Button to send user input
+if st.button("Send") and user_input:
+    with st.spinner("Bot is typing..."):
+        response = get_openai_response(user_input)
+        st.session_state["chat_history"].append({"user": user_input, "bot": response})
+
+        # Display the response
+        st.write(f"**Bot:** {response}")
+
+        # Generate and play audio response
+        audio_file = generate_audio_response(response)
+        st.audio(audio_file, format="audio/mp3", autoplay=True)
+
+# Button to clear chat history
+if st.button("Clear Chat History"):
+    st.session_state["chat_history"] = []
+    st.success("Chat history cleared!")
