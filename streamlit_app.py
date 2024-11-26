@@ -1,8 +1,8 @@
 import streamlit as st
 import openai
 
-# Set your OpenAI API key
-openai.api_key = st.secrets["sk-proj-SOWEfXRcOPAVA8pN7UM9T3BlbkFJdEsqOXSMrBd6KMsQSFBz"]
+# Set your OpenAI API key manually
+openai.api_key = "sk-proj-SOWEfXRcOPAVA8pN7UM9T3BlbkFJdEsqOXSMrBd6KMsQSFBz"
 
 # Initialize session state for chat history
 if "messages" not in st.session_state:
@@ -43,14 +43,17 @@ if prompt := st.chat_input("Ask me about TGM Education!"):
 
     # Generate assistant response
     with st.chat_message("assistant"):
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                *st.session_state.messages,
-            ],
-        )
-        assistant_message = response.choices[0].message["content"]
-        st.markdown(assistant_message)
-        # Add assistant response to chat history
-        st.session_state.messages.append({"role": "assistant", "content": assistant_message})
+        try:
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    *st.session_state.messages,
+                ],
+            )
+            assistant_message = response.choices[0].message["content"]
+            st.markdown(assistant_message)
+            # Add assistant response to chat history
+            st.session_state.messages.append({"role": "assistant", "content": assistant_message})
+        except Exception as e:
+            st.error("An error occurred. Please try again.")
